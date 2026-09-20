@@ -24,17 +24,17 @@ GitHub Explorer is a Flutter web app that searches public GitHub users and brows
 
 ## Screenshots
 
-### Profile and repositories
+### Profile and Repositories
 
-*Add a screenshot of a searched user profile and their repository list.*
+![GitHub profile and repositories](screenshots/profile.png)
 
-### Repository details
+### Repository Details
 
-*Add a screenshot of the repository detail screen.*
+![Repository details](screenshots/repository-details.png)
 
-### Language breakdown
+### Language Breakdown
 
-*Add a screenshot of the language percentages on a repository.*
+![Language breakdown](screenshots/language-breakdown.png)
 
 ## Getting Started
 
