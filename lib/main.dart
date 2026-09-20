@@ -1,122 +1,315 @@
 import 'package:flutter/material.dart';
 
+import 'models/github_repo.dart';
+import 'models/github_user.dart';
+import 'services/github_api.dart';
+import 'widgets/repo_card.dart';
+
 void main() {
-  runApp(const MyApp());
+  runApp(const GithubExplorerApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class GithubExplorerApp extends StatelessWidget {
+  const GithubExplorerApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'GitHub Explorer',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // TRY THIS: Try running your application with "flutter run". You'll see
-        // the application has a purple toolbar. Then, without quitting the app,
-        // try changing the seedColor in the colorScheme below to Colors.green
-        // and then invoke "hot reload" (save your changes or press the "hot
-        // reload" button in a Flutter-supported IDE, or press "r" if you used
-        // the command line to start the app).
-        //
-        // Notice that the counter didn't reset back to zero; the application
-        // state is not lost during the reload. To reset the state, use hot
-        // restart instead.
-        //
-        // This works for code too, not just values: Most code changes can be
-        // tested with just a hot reload.
-        colorScheme: .fromSeed(seedColor: Colors.deepPurple),
+        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blueGrey),
+        useMaterial3: true,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const SearchScreen(),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+class SearchScreen extends StatefulWidget {
+  const SearchScreen({super.key});
 
   @override
-  State<MyHomePage> createState() => _MyHomePageState();
+  State<SearchScreen> createState() => _SearchScreenState();
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+class _SearchScreenState extends State<SearchScreen> {
+  final TextEditingController _usernameController = TextEditingController();
+  final GithubApi _githubApi = GithubApi();
 
-  void _incrementCounter() {
+  bool _isLoading = false;
+  String? _errorMessage;
+  GithubUser? _user;
+
+  bool _isLoadingRepos = false;
+  String? _reposErrorMessage;
+  List<GithubRepo> _repos = [];
+
+  @override
+  void dispose() {
+    _usernameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _searchUser() async {
     setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
+      _isLoading = true;
+      _errorMessage = null;
+      _user = null;
+      _isLoadingRepos = false;
+      _reposErrorMessage = null;
+      _repos = [];
     });
+
+    try {
+      final user = await _githubApi.fetchUser(_usernameController.text);
+      setState(() {
+        _user = user;
+        _isLoading = false;
+      });
+      await _loadRepos(user.login);
+    } on GithubApiException catch (error) {
+      setState(() {
+        _errorMessage = error.message;
+        _isLoading = false;
+      });
+    }
+  }
+
+  Future<void> _loadRepos(String username) async {
+    setState(() {
+      _isLoadingRepos = true;
+      _reposErrorMessage = null;
+      _repos = [];
+    });
+
+    try {
+      final repos = await _githubApi.fetchRepos(username);
+      setState(() {
+        _repos = repos;
+        _isLoadingRepos = false;
+      });
+    } on GithubApiException catch (error) {
+      setState(() {
+        _reposErrorMessage = error.message;
+        _isLoadingRepos = false;
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
       appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+        title: const Text('GitHub Explorer'),
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
+      body: Padding(
+        padding: const EdgeInsets.all(16),
         child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text('You have pushed the button this many times:'),
+            TextField(
+              controller: _usernameController,
+              textInputAction: TextInputAction.search,
+              decoration: const InputDecoration(
+                labelText: 'GitHub username',
+                hintText: 'octocat',
+                border: OutlineInputBorder(),
+              ),
+              onSubmitted: (_) => _searchUser(),
+            ),
+            const SizedBox(height: 12),
+            FilledButton.icon(
+              onPressed: _isLoading ? null : _searchUser,
+              icon: const Icon(Icons.search),
+              label: const Text('Search'),
+            ),
+            const SizedBox(height: 24),
+            Expanded(child: _buildResult()),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResult() {
+    if (_isLoading) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_errorMessage != null) {
+      return Center(
+        child: Text(
+          _errorMessage!,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.error,
+            fontSize: 16,
+          ),
+        ),
+      );
+    }
+
+    if (_user != null) {
+      return SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            _UserCard(user: _user!),
+            const SizedBox(height: 24),
             Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+              'Repositories',
+              style: Theme.of(context).textTheme.titleLarge,
+            ),
+            const SizedBox(height: 12),
+            _buildRepoSection(),
+          ],
+        ),
+      );
+    }
+
+    return const Center(
+      child: Text(
+        'Search for a GitHub user to see their profile.',
+        textAlign: TextAlign.center,
+      ),
+    );
+  }
+
+  Widget _buildRepoSection() {
+    if (_isLoadingRepos) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 24),
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    if (_reposErrorMessage != null) {
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          _reposErrorMessage!,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.error,
+            fontSize: 16,
+          ),
+        ),
+      );
+    }
+
+    if (_repos.isEmpty) {
+      return const Padding(
+        padding: EdgeInsets.symmetric(vertical: 16),
+        child: Text(
+          'This user has no public repositories yet.',
+          textAlign: TextAlign.center,
+        ),
+      );
+    }
+
+    return Column(
+      children: [
+        for (final repo in _repos) RepoCard(repo: repo),
+      ],
+    );
+  }
+}
+
+class _UserCard extends StatelessWidget {
+  const _UserCard({required this.user});
+
+  final GithubUser user;
+
+  @override
+  Widget build(BuildContext context) {
+    final displayName = (user.name == null || user.name!.isEmpty)
+        ? user.login
+        : user.name!;
+    final bio = (user.bio == null || user.bio!.isEmpty)
+        ? 'No bio available.'
+        : user.bio!;
+
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(20),
+        child: Column(
+          children: [
+            CircleAvatar(
+              radius: 48,
+              backgroundImage: NetworkImage(user.avatarUrl),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              displayName,
+              style: Theme.of(context).textTheme.headlineSmall,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              '@${user.login}',
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                color: Theme.of(context).colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              bio,
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 24),
+            Row(
+              children: [
+                Expanded(
+                  child: _StatItem(
+                    label: 'Followers',
+                    value: user.followers.toString(),
+                  ),
+                ),
+                Expanded(
+                  child: _StatItem(
+                    label: 'Following',
+                    value: user.following.toString(),
+                  ),
+                ),
+                Expanded(
+                  child: _StatItem(
+                    label: 'Repos',
+                    value: user.publicRepos.toString(),
+                  ),
+                ),
+              ],
             ),
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  const _StatItem({
+    required this.label,
+    required this.value,
+  });
+
+  final String label;
+  final String value;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text(
+          value,
+          style: Theme.of(context).textTheme.titleLarge,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+      ],
     );
   }
 }
